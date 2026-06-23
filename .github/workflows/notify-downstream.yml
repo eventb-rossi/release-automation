@@ -1,0 +1,72 @@
+name: Notify downstream packaging
+
+# Reusable workflow: fan out a `repository_dispatch` (event_type: upstream-release)
+# to every eventb-rossi packaging repo when one of the upstream tools publishes a
+# release. Each packaging repo's version-check / livecheck / excavator workflow
+# listens for this event and runs its existing detection immediately, instead of
+# waiting for its daily cron. The cron stays as a safety net and for the third-party
+# upstreams (prob, rodin, tlc4b, ...) that can't notify us.
+#
+# Call it from a tool repo's release workflow, after the publish step succeeds:
+#
+#   jobs:
+#     notify-downstream:
+#       needs: [<publish-or-release job id>]
+#       uses: eventb-rossi/release-automation/.github/workflows/notify-downstream.yml@main
+#       with:
+#         tool: rossi
+#         version: ${{ github.event.release.tag_name }}   # or ${{ github.ref_name }}
+#       secrets:
+#         dispatch-token: ${{ secrets.VERSION_BUMP_TOKEN }}
+#
+# dispatch-token must be a PAT with Contents: write on the packaging repos
+# (POST /repos/{owner}/{repo}/dispatches requires it). The shared org secret
+# VERSION_BUMP_TOKEN already qualifies. The built-in GITHUB_TOKEN cannot be used:
+# it is scoped to the caller's own repo and cannot dispatch to the others.
+
+on:
+  workflow_call:
+    inputs:
+      tool:
+        description: Upstream tool that was released (e.g. rossi, eventb-to-txt)
+        required: true
+        type: string
+      version:
+        description: Released version / tag (informational; packagers re-detect)
+        required: true
+        type: string
+    secrets:
+      dispatch-token:
+        description: PAT with Contents:write on the packaging repos (VERSION_BUMP_TOKEN)
+        required: true
+
+permissions: {}   # authenticates with dispatch-token, not the built-in GITHUB_TOKEN
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # one packaging repo failing must not block the rest
+      matrix:
+        repo:
+          - apt
+          - gentoo-overlay
+          - homebrew-tap
+          - scoop-eventb
+          - eventb-copr
+    steps:
+      - name: Dispatch upstream-release to ${{ matrix.repo }}
+        env:
+          GH_TOKEN: ${{ secrets.dispatch-token }}
+          TOOL: ${{ inputs.tool }}
+          VERSION: ${{ inputs.version }}
+          REPO: ${{ matrix.repo }}
+        # Build the body with jq (--arg keeps tool/version injection-safe) and POST
+        # it to the packaging repo's /dispatches endpoint.
+        run: |
+          jq -n --arg tool "$TOOL" --arg version "$VERSION" \
+            '{event_type: "upstream-release", client_payload: {tool: $tool, version: $version}}' \
+          | gh api --method POST \
+              -H "Accept: application/vnd.github+json" \
+              "repos/eventb-rossi/${REPO}/dispatches" \
+              --input -
