@@ -19,6 +19,17 @@ immediately, instead of waiting for its daily cron. The cron stays as a safety
 net and to cover the third-party upstreams (ProB, Rodin, TLC4B, …) that can't
 notify us.
 
+### The website is a special case
+
+[`eventb-rossi.org`](https://github.com/eventb-rossi/eventb-rossi.org) also
+listens for `upstream-release` — it redeploys to refresh the version it bakes in
+at build time. But it shows the **Rossi** version and nothing else, so it is
+notified by a separate `notify-site` job guarded with `if: inputs.tool == 'rossi'`,
+not by the packaging matrix. An `eventb-animate` or `rodin-headless` release must
+not rebuild the site. The site re-checks `client_payload.tool` on its own side as
+well, since `repository_dispatch` accepts a payload from any `Contents: write`
+token; the guard here just keeps no-op runs out of its Actions tab.
+
 ### Producer side
 
 Call the workflow from the release workflow, after the publish/release step:
@@ -35,9 +46,10 @@ jobs:
       dispatch-token: ${{ secrets.VERSION_BUMP_TOKEN }}
 ```
 
-`dispatch-token` must be a PAT with `Contents: write` on the packaging repos
-(`POST /repos/{owner}/{repo}/dispatches` requires it). The shared org secret
-`VERSION_BUMP_TOKEN` already qualifies and must be visible to the tool repos.
+`dispatch-token` must be a PAT with `Contents: write` on the downstream repos —
+the packaging repos and `eventb-rossi.org` (`POST /repos/{owner}/{repo}/dispatches`
+requires it). The shared org secret `VERSION_BUMP_TOKEN` already qualifies and must
+be visible to the tool repos.
 
 ### Consumer side
 
@@ -50,5 +62,13 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types: [upstream-release]
+```
+
+A consumer that cares about only one upstream should say so in the job, rather
+than trusting the sender — `repository_dispatch` is postable by anything holding a
+`Contents: write` token. Keep the `event_name` check or manual runs get skipped too:
+
+```yaml
+    if: ${{ github.event_name != 'repository_dispatch' || github.event.client_payload.tool == 'rossi' }}
 ```
 
