@@ -1,11 +1,18 @@
 name: Notify downstream packaging
 
 # Reusable workflow: fan out a `repository_dispatch` (event_type: upstream-release)
-# to every eventb-rossi packaging repo when one of the upstream tools publishes a
+# to the eventb-rossi downstream repos when one of the upstream tools publishes a
 # release. Each packaging repo's version-check / livecheck / excavator workflow
 # listens for this event and runs its existing detection immediately, instead of
 # waiting for its daily cron. The cron stays as a safety net and for the third-party
 # upstreams (prob, rodin, tlc4b, ...) that can't notify us.
+#
+# Two sets of consumers, with different rules:
+#   * packaging repos (`dispatch` job)    - notified for every tool; they re-detect.
+#   * the website (`notify-site` job)     - notified for `rossi` ONLY. eventb-rossi.org
+#     shows the Rossi version and nothing else, so another tool's release must not
+#     rebuild it. The site filters on client_payload.tool too; this job just keeps
+#     the pointless runs out of its Actions tab.
 #
 # Call it from a tool repo's release workflow, after the publish step succeeds:
 #
@@ -19,7 +26,7 @@ name: Notify downstream packaging
 #       secrets:
 #         dispatch-token: ${{ secrets.VERSION_BUMP_TOKEN }}
 #
-# dispatch-token must be a PAT with Contents: write on the packaging repos
+# dispatch-token must be a PAT with Contents: write on the downstream repos
 # (POST /repos/{owner}/{repo}/dispatches requires it). The shared org secret
 # VERSION_BUMP_TOKEN already qualifies. The built-in GITHUB_TOKEN cannot be used:
 # it is scoped to the caller's own repo and cannot dispatch to the others.
@@ -69,4 +76,26 @@ jobs:
           | gh api --method POST \
               -H "Accept: application/vnd.github+json" \
               "repos/eventb-rossi/${REPO}/dispatches" \
+              --input -
+
+  # eventb-rossi.org rebuilds to refresh its version badge, the JSON-LD
+  # softwareVersion and llms-full.txt — all baked at build time from the rossi
+  # Releases API. Deliberately NOT part of the matrix above: that fans out
+  # unconditionally, and this must fire for rossi alone. Separate job with no
+  # `needs`, so neither side can block or fail the other.
+  notify-site:
+    if: inputs.tool == 'rossi'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch upstream-release to eventb-rossi.org
+        env:
+          GH_TOKEN: ${{ secrets.dispatch-token }}
+          TOOL: ${{ inputs.tool }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          jq -n --arg tool "$TOOL" --arg version "$VERSION" \
+            '{event_type: "upstream-release", client_payload: {tool: $tool, version: $version}}' \
+          | gh api --method POST \
+              -H "Accept: application/vnd.github+json" \
+              "repos/eventb-rossi/eventb-rossi.org/dispatches" \
               --input -
