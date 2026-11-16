@@ -5,7 +5,8 @@ name: Notify downstream packaging
 # release. Each packaging repo's version-check / livecheck / excavator workflow
 # listens for this event and runs its existing detection immediately, instead of
 # waiting for its daily cron. The cron stays as a safety net and for the third-party
-# upstreams (prob, rodin, tlc4b, ...) that can't notify us.
+# upstreams (prob, atelier-b, tlc4b, ...) that can't notify us. Rodin is packaged
+# from eventb-rossi/Rodin-Bundle, which notifies with tool: rodin.
 #
 # Two sets of consumers, with different rules:
 #   * packaging repos (`dispatch` job)    - notified for every tool; they re-detect.
