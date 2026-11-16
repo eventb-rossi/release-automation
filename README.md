@@ -16,8 +16,23 @@ tool publishes a release.
 
 Each packaging repo listens for that event and runs its version-check
 immediately, instead of waiting for its daily cron. The cron stays as a safety
-net and to cover the third-party upstreams (ProB, Rodin, TLC4B, …) that can't
+net and to cover the third-party upstreams (ProB, Atelier B, TLC4B, …) that can't
 notify us.
+
+Producers, and the `tool` each one sends:
+
+| Repository | Workflow | `tool` |
+| --- | --- | --- |
+| [`rossi`](https://github.com/eventb-rossi/rossi) | `release.yml` | `rossi` |
+| [`Rodin-Bundle`](https://github.com/eventb-rossi/Rodin-Bundle) | `release.yml` | `rodin` |
+| [`rodin-headless`](https://github.com/eventb-rossi/rodin-headless) | `release.yml` | `rodin-headless` |
+| [`eventb-animate`](https://github.com/eventb-rossi/eventb-animate) | `release.yml` | `eventb-animate` |
+| [`eventb-checker`](https://github.com/eventb-rossi/eventb-checker) | `release.yml` | `eventb-checker` |
+| [`eventb-to-txt`](https://github.com/eventb-rossi/eventb-to-txt) | `deploy.yml` | `eventb-to-txt` |
+
+The packaging repos ship Rodin as the `rodin` package built from Rodin-Bundle,
+not vanilla Rodin, which is why its `tool` is `rodin`. Rodin-Bundle also notifies
+for `-rcN` candidates, because `rodin-rc` follows the newest release or candidate.
 
 ### The website is a special case
 
